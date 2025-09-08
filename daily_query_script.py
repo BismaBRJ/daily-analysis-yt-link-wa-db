@@ -1,5 +1,5 @@
 """
-The script to be ran every day
+The querying script to be ran every day
 """
 
 # Imports
@@ -18,7 +18,13 @@ DB_PATH = ( # macOS path to SQLite database file. Feel free to relocate
     "group.net.whatsapp.WhatsApp.shared" /
     "ChatStorage.sqlite"
 ).expanduser()
-PHONE_NUMBERS = ["628123456789", "6281357986420"]
+PHONE_NAME_MAP = {
+    "62123456789": "rel01",
+    "621357986420": "rel02"
+}
+SAVE_FOLDER_PATH = (
+    Path(__file__).parent / "parquet_data"
+)
 
 # Script
 
@@ -60,7 +66,10 @@ def unix_timestamp_from_wa(wa_timestamp):
         timestamp_wa_epoch_int - timestamp_unix_epoch_int
     )
 
-date_today = datetime.date.today()
+date_today = (
+    datetime.date.today()
+    + datetime.timedelta(days=-7) # temporary shift
+)
 time_midnight = datetime.time(0,0,0)
 dt_today_midnight = datetime.datetime.combine(date_today, time_midnight)
 unix_timestamp_today = dt_today_midnight.timestamp()
@@ -77,8 +86,9 @@ wa_timestamp_tomorrow_int = int(wa_timestamp_tomorrow)
 # 3. Query data
 
 print("Querying database...")
+phone_numbers_list = PHONE_NAME_MAP.keys()
 phone_rows_map = dict()
-for phone_str in PHONE_NUMBERS:
+for phone_str in phone_numbers_list:
     cur = conn.cursor()
     cur.execute(f"""
 SELECT ZTEXT
@@ -137,7 +147,7 @@ spark = (
 )
 print("SparkSession started")
 
-df_list = []
+phone_df_map = dict()
 print("Creating PySpark DataFrames...")
 for phone_number, rows_list in phone_rows_map.items():
     current_df = spark.createDataFrame(
@@ -154,15 +164,33 @@ for phone_number, rows_list in phone_rows_map.items():
             .cast("timestamp")
         )
     })
-    df_list.append(current_df)
+    phone_df_map[phone_number] = current_df
 print("DataFrames created")
 
 # debug
 print("Displaying DataFrames...")
-for cur_df in df_list:
-    print(cur_df.show())
+for phone_number, cur_df in phone_df_map.items():
+    print("Phone number:", phone_number)
+    cur_df.show()
 print("DataFrames displayed")
 
 # 5. Save "raw" data to Parquet
 
-#todo
+cur_year = str(date_today.year)
+cur_month = str(date_today.month).zfill(2)
+cur_date_day = str(date_today.day).zfill(2)
+specific_folder = (
+    SAVE_FOLDER_PATH / cur_year / cur_month / cur_date_day
+)
+print("Saving DataFrames at:", specific_folder)
+specific_folder.mkdir(parents=True, exist_ok=True)
+for phone_number, cur_df in phone_df_map.items():
+    phone_name = PHONE_NAME_MAP[phone_number]
+    filename = f"{cur_year}_{cur_month}_{cur_date_day}_query_{phone_name}"
+    full_file_path_ext = (specific_folder / filename).with_suffix(".parquet")
+
+    #cur_df.write.parquet(full_file_path_ext)
+    # AttributeError: 'PosixPath' object has no attribute '_get_object_id'
+
+    cur_df.write.parquet(str(full_file_path_ext))
+print("DataFrames saved")
