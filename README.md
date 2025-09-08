@@ -20,7 +20,7 @@ Unlike the usual Kaggle projects where data is analyzed once and for all, I real
 
 1. Extract messages (with additional data, like timestamps) from that SQLite database;
 
-2. Transform the data into insights with PySpark, even MLLib for topic modeling; then
+2. Transform the data into insights with PySpark, even MLlib for topic modeling; then
 
 3. Load that data into a different storage, say a Parquet file, from which I can then display a dashboard made with Streamlit.
 
